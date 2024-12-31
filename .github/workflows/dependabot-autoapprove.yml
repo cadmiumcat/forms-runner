@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
-      - run: echo "This PR was raised by Dependabot
+      - run: echo "This PR was raised by Dependabot"
   validate_this_is_an_allowed_dependency:
     needs: validate_dependabot_opened_this_PR
     runs-on: ubuntu-latest
