@@ -333,7 +333,10 @@ GEM
     rdoc (6.10.0)
       psych (>= 4.0.0)
     redcarpet (3.6.0)
-    redis (4.8.1)
+    redis (5.3.0)
+      redis-client (>= 0.22.0)
+    redis-client (0.23.0)
+      connection_pool
     redis-session-store (0.11.6)
       actionpack (>= 5.2.4.1, < 9)
       redis (>= 3, < 6)
