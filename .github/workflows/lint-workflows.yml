@@ -13,7 +13,7 @@ jobs:
       - name: Download actionlint
         id: get_actionlint
         run: |
-          curl -L "https://github.com/rhysd/actionlint/releases/download/actionlint_1.7.7_linux_amd64.tar.gz" -o "actionlint.tar.gz"
+          curl -L "https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz" -o "actionlint.tar.gz"
           tar -xvzf actionlint.tar.gz
           chmod +x actionlint
           sudo mv actionlint /usr/local/bin/actionlint
