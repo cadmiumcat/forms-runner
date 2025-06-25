@@ -3,41 +3,21 @@ name: "Lint Workflows"
 on:
   pull_request:
     branches: [main]
-  merge_group:
-    types: [checks_requested]
 permissions:
   contents: read
 jobs:
-  shell-ci:
+  actionlint:
     runs-on: ubuntu-latest
-    name: Shell
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Lint shell scripts in GitHub actions
+      - uses: actions/checkout@v4
+      - name: Download actionlint
+        id: get_actionlint
         run: |
-          # if yq --version | grep "4.45.4" ; then
-          #   echo "Skipping because version 4.45.4 is buggy and makes these tests fails erroneously";
-          #   exit 0;
-          # fi
-
-          # This is not the usual/best way to get the script directory.
-          # We need to do this here because GitHub Actions writes the
-          # content of script blocks like these to a temp directory,
-          # which means the source code directory and the directory
-          # in which the script reside are different
-          script_dir="$(readlink -f "$(dirname .github)")"
-
-          while IFS= read -r -d '' workflow
-          do
-            for path in $(yq '.jobs[] | .steps[] | select(.|has("run")) | .run | "."+(path | join("."))' "${script_dir}/${workflow}");
-            do
-              pushd "$(mktemp -d)" >/dev/null || exit
-                  workflow_name="$(basename "${script_dir}/${workflow}")"
-                  file="${workflow_name}__${path}"
-                  touch "${file}"
-                  yq "${path}" "${script_dir}/${workflow}" > "${file}"
-                  shellcheck -s bash "${file}"
-              popd >/dev/null || exit
-            done
-          done <  <(find ".github/workflows" -type f \( -name "*.yml" -or -name "*.yaml" \) -print0)
+          curl -L "https://github.com/rhysd/actionlint/releases/download/actionlint_1.7.7_linux_amd64.tar.gz" -o "actionlint.tar.gz"
+          tar -xvzf actionlint.tar.gz
+          chmod +x actionlint
+          sudo mv actionlint /usr/local/bin/actionlint
+        shell: bash
+      - name: Check workflow files
+        run: actionlint -color
+        shell: bash
