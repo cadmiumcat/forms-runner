@@ -16,10 +16,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Lint shell scripts in GitHub actions
         run: |
-          if yq --version | grep "4.45.4" ; then
-            echo "Skipping because version 4.45.4 is buggy and makes these tests fails erroneously";
-            exit 0;
-          fi
+          # if yq --version | grep "4.45.4" ; then
+          #   echo "Skipping because version 4.45.4 is buggy and makes these tests fails erroneously";
+          #   exit 0;
+          # fi
 
           # This is not the usual/best way to get the script directory.
           # We need to do this here because GitHub Actions writes the
