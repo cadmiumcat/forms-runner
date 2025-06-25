@@ -3,17 +3,41 @@ name: "Lint Workflows"
 on:
   pull_request:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 permissions:
   contents: read
 jobs:
-  actionlint:
+  shell-ci:
     runs-on: ubuntu-latest
+    name: Shell
     steps:
-      - uses: actions/checkout@v4
-      - name: Download actionlint
-        id: get_actionlint
-        run: bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-        shell: bash
-      - name: Check workflow files
-        run: ${{ steps.get_actionlint.outputs.executable }} -color
-        shell: bash
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Lint shell scripts in GitHub actions
+        run: |
+          if yq --version | grep "4.45.4" ; then
+            echo "Skipping because version 4.45.4 is buggy and makes these tests fails erroneously";
+            exit 0;
+          fi
+
+          # This is not the usual/best way to get the script directory.
+          # We need to do this here because GitHub Actions writes the
+          # content of script blocks like these to a temp directory,
+          # which means the source code directory and the directory
+          # in which the script reside are different
+          script_dir="$(readlink -f "$(dirname .github)")"
+
+          while IFS= read -r -d '' workflow
+          do
+            for path in $(yq '.jobs[] | .steps[] | select(.|has("run")) | .run | "."+(path | join("."))' "${script_dir}/${workflow}");
+            do
+              pushd "$(mktemp -d)" >/dev/null || exit
+                  workflow_name="$(basename "${script_dir}/${workflow}")"
+                  file="${workflow_name}__${path}"
+                  touch "${file}"
+                  yq "${path}" "${script_dir}/${workflow}" > "${file}"
+                  shellcheck -s bash "${file}"
+              popd >/dev/null || exit
+            done
+          done <  <(find ".github/workflows" -type f \( -name "*.yml" -or -name "*.yaml" \) -print0)
