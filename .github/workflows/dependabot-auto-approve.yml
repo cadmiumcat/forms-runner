@@ -83,6 +83,7 @@ jobs:
   auto_approve_and_merge:
     permissions:
       pull-requests: write
+      contents: write
     runs-on: ubuntu-latest
     needs: [validate_dependabot_opened_this_PR, validate_this_is_an_allowed_dependency, wait_for_checks]
     if: ${{ needs.validate_this_is_an_allowed_dependency.outputs.is_allowed_dependency == 1 }}
