@@ -1,7 +1,13 @@
 require "rails_helper"
 
 RSpec.describe FormSubmissionService do
-  let(:service) { described_class.call(current_context:, email_confirmation_input:, preview_mode:) }
+  include ActiveJob::TestHelper
+
+  subject(:service) { described_class.call(current_context:, email_confirmation_input:, mode:) }
+
+  let(:mode) { Mode.new }
+  let(:email_confirmation_input) { build :email_confirmation_input_opted_in }
+
   let(:form) do
     build(:form,
           id: 1,
@@ -14,8 +20,10 @@ RSpec.describe FormSubmissionService do
           submission_email:,
           payment_url:,
           submission_type:,
-          pages:)
+          pages:,
+          document_json: form_document)
   end
+  let(:form_document) { build(:v2_form_document).to_h.with_indifferent_access }
   let(:pages) { [build(:page, id: 2, answer_type: "text")] }
   let(:submission_type) { "email" }
   let(:what_happens_next_markdown) { "We usually respond to applications within 10 working days." }
@@ -23,16 +31,25 @@ RSpec.describe FormSubmissionService do
   let(:support_phone) { Faker::Lorem.paragraph(sentence_count: 2, supplemental: true, random_sentences_to_add: 4) }
   let(:support_url) { Faker::Internet.url(host: "gov.uk") }
   let(:support_url_text) { Faker::Lorem.sentence(word_count: 1, random_words_to_add: 4) }
-  let(:current_context) { OpenStruct.new(form:, completed_steps: [step], support_details: OpenStruct.new(call_back_url: "http://gov.uk")) }
-  let(:request) { OpenStruct.new({ url: "url", method: "method" }) }
-  let(:step) { OpenStruct.new({ question_text: "What is the meaning of life?", show_answer_in_email: "42" }) }
-  let(:preview_mode) { false }
-  let(:email_confirmation_input) { build :email_confirmation_input_opted_in }
-  let(:reference) { Faker::Alphanumeric.alphanumeric(number: 8).upcase }
   let(:payment_url) { nil }
   let(:submission_email) { "testing@gov.uk" }
-  let(:submission_email_id) { "id-for-submission-email-notification" }
-  let(:confirmation_email_id) { "id-for-confirmation-email-notification" }
+
+  let(:reference) { Faker::Alphanumeric.alphanumeric(number: 8).upcase }
+
+  let(:step) { OpenStruct.new({ question_text: "What is the meaning of life?", show_answer_in_email: "42" }) }
+  let(:all_steps) { [step] }
+  let(:journey) { instance_double(Flow::Journey, completed_steps: all_steps, all_steps:) }
+  let(:answers) do
+    {
+      "1" => {
+        selection: "Option 1",
+      },
+      "2" => {
+        text: "Example text",
+      },
+    }
+  end
+  let(:current_context) { instance_double(Flow::Context, form:, journey:, completed_steps: all_steps, support_details: OpenStruct.new(call_charges_url: "http://gov.uk"), answers:) }
 
   let(:output) { StringIO.new }
   let(:logger) do
@@ -52,13 +69,6 @@ RSpec.describe FormSubmissionService do
   end
 
   describe "#submit" do
-    let(:notify_submission_service_spy) { instance_double(NotifySubmissionService) }
-
-    before do
-      allow(NotifySubmissionService).to receive(:new).and_return(notify_submission_service_spy)
-      allow(notify_submission_service_spy).to receive(:submit)
-    end
-
     it "returns the submission reference" do
       expect(service.submit).to eq reference
     end
@@ -77,48 +87,13 @@ RSpec.describe FormSubmissionService do
         expect(LogEventService).to have_received(:log_submit).with(
           current_context,
           requested_email_confirmation: true,
-          preview: preview_mode,
+          preview: mode.preview?,
           submission_type:,
         )
       end
     end
 
     describe "submitting the form to the processing team" do
-      context "when the submission type is email" do
-        let(:submission_type) { "email" }
-
-        it "calls NotifySubmissionService to submit the form" do
-          service.submit
-          expect(notify_submission_service_spy).to have_received(:submit)
-        end
-      end
-
-      context "when the submission type is email_with_csv" do
-        let(:submission_type) { "email_with_csv" }
-
-        it "calls NotifySubmissionService to submit the form" do
-          service.submit
-          expect(notify_submission_service_spy).to have_received(:submit)
-        end
-
-        include_examples "logging"
-      end
-
-      context "when the form has a file upload question" do
-        let(:pages) { [build(:page, id: 2, answer_type: "file")] }
-        let(:aws_ses_submission_service_spy) { instance_double(AwsSesSubmissionService) }
-
-        before do
-          allow(AwsSesSubmissionService).to receive(:new).and_return(aws_ses_submission_service_spy)
-          allow(aws_ses_submission_service_spy).to receive(:submit)
-        end
-
-        it "calls AwsSesSubmissionService to submit the form" do
-          service.submit
-          expect(aws_ses_submission_service_spy).to have_received(:submit)
-        end
-      end
-
       context "when the submission type is s3" do
         let(:submission_type) { "s3" }
         let(:s3_submission_service_spy) { instance_double(S3SubmissionService) }
@@ -133,10 +108,11 @@ RSpec.describe FormSubmissionService do
             service.submit
 
             expect(S3SubmissionService).to have_received(:new).with(
-              current_context:,
+              journey:,
+              form:,
               timestamp: Time.zone.now,
               submission_reference: reference,
-              preview_mode:,
+              is_preview: mode.preview?,
             ).once
           end
         end
@@ -146,16 +122,96 @@ RSpec.describe FormSubmissionService do
           expect(s3_submission_service_spy).to have_received(:submit)
         end
 
-        it "does not call NotifySubmissionService to submit the form" do
-          service.submit
-          expect(notify_submission_service_spy).not_to have_received(:submit)
+        include_examples "logging"
+      end
+
+      shared_examples "submits via AWS SES" do
+        let(:aws_ses_submission_service_spy) { instance_double(AwsSesSubmissionService) }
+        let(:mail_message_id) { "1234" }
+
+        let(:req_headers) do
+          {
+            "X-API-Token" => Settings.forms_api.auth_key,
+            "Accept" => "application/json",
+          }
         end
+
+        before do
+          ActiveResource::HttpMock.respond_to do |mock|
+            mock.get "/api/v2/forms/1/live", req_headers, form.to_json, 200
+          end
+
+          allow(Flow::Journey).to receive(:new)
+
+          allow(AwsSesSubmissionService).to receive(:new).and_return(aws_ses_submission_service_spy)
+          allow(aws_ses_submission_service_spy).to receive(:submit).and_return(mail_message_id)
+        end
+
+        it "enqueues a job to send the submission" do
+          assert_enqueued_with(job: SendSubmissionJob) do
+            service.submit
+          end
+
+          expect(aws_ses_submission_service_spy).not_to have_received(:submit)
+
+          perform_enqueued_jobs
+
+          expect(aws_ses_submission_service_spy).to have_received(:submit)
+        end
+
+        it "saves the submission data" do
+          expect {
+            service.submit
+          }.to change(Submission, :count).by(1)
+
+          expect(Submission.last).to have_attributes(reference:, form_id: form.id, answers: answers.deep_stringify_keys,
+                                                     mode: "form", mail_message_id: nil, form_document: form_document,
+                                                     sent_at: nil)
+        end
+
+        context "when the job fails to enqueue" do
+          let(:enqueue_error) { nil }
+
+          define_negated_matcher :not_change, :change
+
+          before do
+            allow(SendSubmissionJob).to receive(:perform_later).and_yield(instance_double(SendSubmissionJob, successfully_enqueued?: false, enqueue_error:))
+          end
+
+          context "and there is no enqueue error" do
+            it "raises an error" do
+              expect { service.submit }.to not_change(Submission, :count).and raise_error(StandardError, "Failed to enqueue submission for reference #{reference}")
+            end
+          end
+
+          context "and there is an enqueue error" do
+            let(:enqueue_error) { ActiveJob::EnqueueError.new("An error occurred enqueueing job") }
+
+            it "raises an error" do
+              expect { service.submit }.to not_change(Submission, :count).and raise_error(StandardError, "Failed to enqueue submission for reference #{reference}: An error occurred enqueueing job")
+            end
+          end
+        end
+      end
+
+      context "when the submission type is email" do
+        let(:submission_type) { "email" }
+
+        include_examples "submits via AWS SES"
+
+        include_examples "logging"
+      end
+
+      context "when the submission type is email_with_csv" do
+        let(:submission_type) { "email_with_csv" }
+
+        include_examples "submits via AWS SES"
 
         include_examples "logging"
       end
 
       context "when form being submitted is from previewed form" do
-        let(:preview_mode) { true }
+        let(:mode) { Mode.new("preview-live") }
 
         include_examples "logging"
       end
@@ -194,31 +250,6 @@ RSpec.describe FormSubmissionService do
           allow(FormSubmissionConfirmationMailer).to receive(:send_confirmation_email)
           service.submit
           expect(FormSubmissionConfirmationMailer).not_to have_received(:send_confirmation_email)
-        end
-      end
-
-      context "when form is draft" do
-        context "when form does not have 'what happens next details'" do
-          let(:what_happens_next_markdown) { nil }
-
-          it "does not call FormSubmissionConfirmationMailer" do
-            allow(FormSubmissionConfirmationMailer).to receive(:send_confirmation_email)
-            service.submit
-            expect(FormSubmissionConfirmationMailer).not_to have_received(:send_confirmation_email)
-          end
-        end
-
-        context "when form does not have any support details" do
-          let(:support_email) { nil }
-          let(:support_phone) { nil }
-          let(:support_url) { nil }
-          let(:support_url_text) { nil }
-
-          it "does not call FormSubmissionConfirmationMailer" do
-            allow(FormSubmissionConfirmationMailer).to receive(:send_confirmation_email)
-            service.submit
-            expect(FormSubmissionConfirmationMailer).not_to have_received(:send_confirmation_email)
-          end
         end
       end
     end

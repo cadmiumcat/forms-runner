@@ -4,7 +4,7 @@ require "rails"
 # Pick the frameworks you want:
 require "active_model/railtie"
 require "active_job/railtie"
-# require "active_record/railtie"
+require "active_record/railtie"
 # require "active_storage/engine"
 require "action_controller/railtie"
 require "action_mailer/railtie"
@@ -29,7 +29,7 @@ module FormsRunner
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
-    config.autoload_lib(ignore: %w[assets tasks generators])
+    config.autoload_lib(ignore: %w[assets tasks generators notifications_utils])
 
     # Configuration for the application, engines, and railties goes here.
     #
@@ -66,7 +66,7 @@ module FormsRunner
     config.lograge.keep_original_rails_log = false
 
     config.lograge.custom_options = lambda do |event|
-      CurrentLoggingAttributes.as_hash.merge(exception: event.payload[:exception]).compact
+      CurrentRequestLoggingAttributes.as_hash.merge(exception: event.payload[:exception]).compact
     end
 
     # Use custom logger and formatter to log in JSON with request context fields. To use conventional
@@ -76,5 +76,15 @@ module FormsRunner
 
     # custom configuration for the SES mailer delivery method
     config.x.aws_ses_form_submission_mailer.delivery_method = :aws_ses
+
+    # Prevent ActiveRecord::PreparedStatementCacheExpired errors when adding columns
+    config.active_record.enumerate_columns_in_select_statements = true
+
+    # TODO: remove this when all sensitive data is encrypted
+    # See https://guides.rubyonrails.org/active_record_encryption.html#support-for-unencrypted-data
+    config.active_record.encryption.support_unencrypted_data = true
+
+    I18n.available_locales = %i[en cy]
+    I18n.default_locale = :en
   end
 end

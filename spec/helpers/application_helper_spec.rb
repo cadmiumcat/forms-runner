@@ -9,35 +9,16 @@ RSpec.describe ApplicationHelper, type: :helper do
 
       it "returns the title with the GOV.UK suffix" do
         expect(view.content_for(:title)).to eq("Test")
-        expect(helper.page_title).to eq("Test – GOV.UK")
       end
     end
 
     context "when set_page_title is supplied with multiple arguments" do
       before do
-        helper.set_page_title("Test", "GOV.UK Forms")
+        helper.set_page_title("Test", t("gov_uk_forms"))
       end
 
       it "returns the title with the GOV.UK suffix" do
         expect(view.content_for(:title)).to eq("Test – GOV.UK Forms")
-        expect(helper.page_title).to eq("Test – GOV.UK Forms – GOV.UK")
-      end
-    end
-  end
-
-  describe "#question_text_with_optional_suffix_inc_mode" do
-    it "renders the question text followed by the mode the page is viewed in" do
-      page = OpenStruct.new(question: OpenStruct.new(question_text_with_optional_suffix: "What is your name?"))
-      allow(helper).to receive(:hidden_text_mode).and_return("<span>PREVIEWING MODE</span>")
-      expect(helper.question_text_with_optional_suffix_inc_mode(page, "mode")).to eq("What is your name? <span>PREVIEWING MODE</span>")
-    end
-
-    context "with unsafe question text" do
-      it "returns the escaped title but doesn't escape the trusted suffix" do
-        page = OpenStruct.new(question: OpenStruct.new(question_text_with_optional_suffix: "What is your name? <script>alert(\"Hi\")</script>"))
-        allow(helper).to receive(:hidden_text_mode).and_return("<span>not escaped</span>")
-        expected_output = "What is your name? &lt;script&gt;alert(&quot;Hi&quot;)&lt;/script&gt; <span>not escaped</span>"
-        expect(helper.question_text_with_optional_suffix_inc_mode(page, "")).to eq(expected_output)
       end
     end
   end
@@ -111,6 +92,32 @@ RSpec.describe ApplicationHelper, type: :helper do
   describe "#format_paragraphs" do
     it "splits text into paragraphs and encodes HTML characters" do
       expect(helper.format_paragraphs("Paragraph 1\n\n<h2>paragraph 2</h2>")).to eq "<p>Paragraph 1</p>\n\n<p>&lt;h2&gt;paragraph 2&lt;/h2&gt;</p>"
+    end
+  end
+
+  describe "#init_autocomplete_script" do
+    before do
+      helper.init_autocomplete_script
+    end
+
+    it "returns the autocomplete script" do
+      expect(view.content_for(:body_end)).to include("
+      document.addEventListener('DOMContentLoaded', function(event) {
+        if(window.dfeAutocomplete !== undefined && typeof window.dfeAutocomplete === 'function') {
+          dfeAutocomplete({
+            showAllValues: true,
+            rawAttribute: false,
+            source: false,
+            autoselect: false,
+            tNoResults: () => 'No results found',
+            tStatusQueryTooShort: (minQueryLength) => `Type in ${minQueryLength} or more characters for results`,
+            tStatusNoResults: () => 'No search results',
+            tStatusSelectedOption: (selectedOption, length, index) => `${selectedOption} ${index + 1} of ${length} is highlighted`,
+            tStatusResults: (length, contentSelectedOption) => (length === 1 ? `${length} result is available. ${contentSelectedOption}` : `${length} results are available. ${contentSelectedOption}`),
+            tAssistiveHint: () => 'When autocomplete results are available use up and down arrows to review and enter to select.  Touch device users, explore by touch or with swipe gestures.',
+          })
+        }
+      });")
     end
   end
 end

@@ -14,10 +14,12 @@ RSpec.describe Forms::BaseController, type: :request do
       what_happens_next_markdown: "Good things come to those that wait",
       declaration_text: "agree to the declaration",
       steps: steps_data,
+      language:,
     )
   end
   let(:start_page) { 1 }
   let(:live_at) { "2022-08-18 09:16:50 +0100" }
+  let(:language) { "en" }
 
   let(:no_data_found_response) do
     {
@@ -94,12 +96,16 @@ RSpec.describe Forms::BaseController, type: :request do
       expect(log_lines[0]["form_id"]).to eq(form_id.to_s)
     end
 
+    it "includes preview bool on log lines" do
+      expect(log_lines[0]["preview"]).to eq("false")
+    end
+
     it "includes the trace ID on log lines" do
       expect(log_lines[0]["trace_id"]).to eq(trace_id)
     end
 
-    it "includes the host on log lines" do
-      expect(log_lines[0]["host"]).to eq("www.example.com")
+    it "includes the request_host on log lines" do
+      expect(log_lines[0]["request_host"]).to eq("www.example.com")
     end
 
     it "includes the request_id on log lines" do
@@ -190,7 +196,7 @@ RSpec.describe Forms::BaseController, type: :request do
           end
 
           it "Render the not found page" do
-            expect(response.body).to include(I18n.t("not_found.title"))
+            expect(response.body).to include(I18n.t("errors.not_found.title"))
           end
 
           it "returns 404" do
@@ -206,7 +212,7 @@ RSpec.describe Forms::BaseController, type: :request do
           end
 
           it "Render the not found page" do
-            expect(response.body).to include(I18n.t("not_found.title"))
+            expect(response.body).to include(I18n.t("errors.not_found.title"))
           end
 
           it "returns 404" do
@@ -267,7 +273,7 @@ RSpec.describe Forms::BaseController, type: :request do
           end
 
           it "Render the not found page" do
-            expect(response.body).to include(I18n.t("not_found.title"))
+            expect(response.body).to include(I18n.t("errors.not_found.title"))
           end
 
           it "returns 404" do
@@ -283,7 +289,7 @@ RSpec.describe Forms::BaseController, type: :request do
           end
 
           it "Render the not found page" do
-            expect(response.body).to include(I18n.t("not_found.title"))
+            expect(response.body).to include(I18n.t("errors.not_found.title"))
           end
 
           it "returns 404" do
@@ -336,8 +342,95 @@ RSpec.describe Forms::BaseController, type: :request do
           end
 
           it "Render the not found page" do
-            expect(response.body).to include(I18n.t("not_found.title"))
+            expect(response.body).to include(I18n.t("errors.not_found.title"))
           end
+        end
+      end
+
+      context "when the form is archived" do
+        before do
+          ActiveResource::HttpMock.respond_to do |mock|
+            mock.get "/api/v2/forms/2/live", req_headers, nil, 404
+            mock.get "/api/v2/forms/2/archived", req_headers, form_response_data.to_json, 200
+          end
+
+          get form_path(mode: "form", form_id: 2, form_slug: form_response_data.form_slug)
+        end
+
+        it "Renders the form archived page" do
+          expect(response.body).to include(I18n.t("form.archived.title"))
+        end
+      end
+    end
+  end
+
+  describe "locale" do
+    context "when getting a form page that exists" do
+      before do
+        get form_page_path(mode: "form", form_id: 2, form_slug: form_response_data.form_slug, page_slug: 1)
+      end
+
+      context "when the form is English" do
+        it "renders content in English" do
+          expect(response.body).to include(I18n.t("support_details.get_help_with_this_form"))
+        end
+      end
+
+      context "when the form is Welsh" do
+        let(:language) { "cy" }
+
+        it "renders content in Welsh" do
+          expect(response.body).to include(I18n.t("support_details.get_help_with_this_form", locale: :cy))
+        end
+      end
+
+      context "when the language attribute is not set for the form" do
+        let(:form_response_data) do
+          form_document = build(
+            :v2_form_document,
+            :with_support,
+            id: 2,
+            live_at:,
+            start_page:,
+            privacy_policy_url: "http://www.example.gov.uk/privacy_policy",
+            what_happens_next_markdown: "Good things come to those that wait",
+            declaration_text: "agree to the declaration",
+            steps: steps_data,
+          )
+          form_document.delete_field(:language)
+          form_document
+        end
+
+        it "renders content in English" do
+          expect(response.body).to include(I18n.t("support_details.get_help_with_this_form"))
+        end
+      end
+    end
+
+    context "when getting a form page that doesn't exist" do
+      before do
+        get form_page_path(mode: "form", form_id: 2, form_slug: form_response_data.form_slug, page_slug: 42)
+      end
+
+      context "when the form is English" do
+        it "returns 404" do
+          expect(response).to have_http_status(:not_found)
+        end
+
+        it "renders the error page in English" do
+          expect(response.body).to include(I18n.t("errors.not_found.title"))
+        end
+      end
+
+      context "when the form is Welsh" do
+        let(:language) { "cy" }
+
+        it "returns 404" do
+          expect(response).to have_http_status(:not_found)
+        end
+
+        it "renders the error page in Welsh" do
+          expect(response.body).to include(I18n.t("errors.not_found.title", locale: :cy))
         end
       end
     end

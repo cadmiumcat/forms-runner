@@ -4,6 +4,7 @@ class Form < ActiveResource::Base
   self.include_format_in_path = false
 
   has_many :pages
+  attr_accessor :document_json
 
   def last_page
     pages.find { |p| !p.has_next_page? }
@@ -28,9 +29,5 @@ class Form < ActiveResource::Base
     return nil if payment_url.blank?
 
     "#{payment_url}?reference=#{reference}"
-  end
-
-  def has_file_upload_question?
-    pages.any? { |p| p.answer_type == "file" }
   end
 end

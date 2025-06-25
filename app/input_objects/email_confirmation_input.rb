@@ -2,16 +2,16 @@ class EmailConfirmationInput
   include ActiveModel::Model
   include ActiveModel::Validations
 
-  attr_accessor :send_confirmation, :confirmation_email_address, :confirmation_email_reference, :submission_email_reference
+  attr_accessor :send_confirmation, :confirmation_email_address, :confirmation_email_reference
 
   validates :send_confirmation, presence: true
   validates :send_confirmation, inclusion: { in: %w[send_email skip_confirmation] }
   validates :confirmation_email_address, presence: true, if: :validate_email?
-  validates :confirmation_email_address, format: { with: URI::MailTo::EMAIL_REGEXP, message: :invalid_email }, allow_blank: true, if: :validate_email?
+  validates :confirmation_email_address, email_address: { message: :invalid_email }, allow_blank: true, if: :validate_email?
 
   def initialize(...)
     super(...)
-    generate_notify_response_ids! unless @confirmation_email_reference || @submission_email_reference
+    generate_notify_response_ids! unless @confirmation_email_reference
   end
 
   def validate_email?
@@ -24,7 +24,6 @@ private
     uuid = SecureRandom.uuid
     self.attributes = {
       confirmation_email_reference: "#{uuid}-confirmation-email",
-      submission_email_reference: "#{uuid}-submission-email",
     }
   end
 end

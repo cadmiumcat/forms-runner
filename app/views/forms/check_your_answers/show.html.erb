@@ -2,7 +2,7 @@
 
 <% content_for :back_link do %>
   <% if @back_link %>
-    <%= link_to "Back", @back_link, class: "govuk-back-link" %>
+    <%= link_to t("forms.back"), @back_link, class: "govuk-back-link" %>
   <% end %>
 <% end %>
 
@@ -10,10 +10,10 @@
   <div class="govuk-grid-row">
     <div class="govuk-grid-column-two-thirds-from-desktop">
       <% if email_confirmation_input&.errors&.any? %>
-        <%= form.govuk_error_summary %>
+        <%= form.govuk_error_summary(t("error_summary_title")) %>
       <% end %>
 
-      <h1 class="govuk-heading-l">Check your answers before submitting your form</h1>
+      <h1 class="govuk-heading-l"><%= t('form.check_your_answers.title') %></h1>
     </div>
   </div>
 
@@ -33,7 +33,7 @@
   <div class="govuk-grid-row">
     <div class="govuk-grid-column-two-thirds-from-desktop">
       <%= form.govuk_radio_buttons_fieldset(:send_confirmation, legend: { size: 'm', tag: 'h2' }) do %>
-        <%= form.govuk_radio_button :send_confirmation, 'send_email' do %>
+        <%= form.govuk_radio_button :send_confirmation, 'send_email', link_errors: :true do %>
           <%= form.govuk_email_field :confirmation_email_address, autocomplete: 'email', spellcheck: false  %>
         <% end %>
         <%= form.govuk_radio_button :send_confirmation, 'skip_confirmation' %>
@@ -42,13 +42,18 @@
       <%= form.hidden_field :confirmation_email_reference, id: 'confirmation-email-reference' %>
 
       <%if @current_context.form.declaration_text.present? %>
-        <h2 class="govuk-heading-m govuk-!-margin-top-7">Declaration</h2>
+        <h2 class="govuk-heading-m govuk-!-margin-top-7"><%= t('form.check_your_answers.declaration') %></h2>
         <%= HtmlMarkdownSanitizer.new.render_scrubbed_html(@current_context.form.declaration_text) %>
       <% end %>
 
-      <%= form.hidden_field :submission_email_reference, id: 'submission-email-reference' %>
-
       <%= form.govuk_submit(@current_context.form.declaration_text.present? ? t('form.check_your_answers.agree_and_submit') : t('form.check_your_answers.submit')) %>
+    </div>
+
+
+  </div>
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds-from-desktop">
+      <%= render SupportDetailsComponent::View.new(@support_details) %>
     </div>
   </div>
 <% end %>

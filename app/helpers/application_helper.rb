@@ -2,10 +2,6 @@
 
 # ApplicationHelper
 module ApplicationHelper
-  def page_title
-    join_title_elements([content_for(:title), "GOV.UK"])
-  end
-
   def set_page_title(*args)
     content_for(:title) { join_title_elements(args) }
   end
@@ -21,12 +17,6 @@ module ApplicationHelper
                     ""
                   end
     "#{t('page_titles.error_prefix') if error}#{page_name}#{mode_string} - #{form_name}"
-  end
-
-  def question_text_with_optional_suffix_inc_mode(page, mode)
-    mode_string = hidden_text_mode(mode)
-
-    [CGI.escapeHTML(page.question.question_text_with_optional_suffix), mode_string].compact_blank.join(" ").html_safe
   end
 
   def hidden_text_mode(mode)
@@ -50,17 +40,23 @@ module ApplicationHelper
     "/node_modules/govuk-frontend/dist/govuk/assets"
   end
 
-  def init_autocomplete_script(show_all_values: false, raw_attribute: false, source: false, auto_select: false)
+  def init_autocomplete_script
     content_for(:body_end) do
       javascript_tag defer: true do
         "
       document.addEventListener('DOMContentLoaded', function(event) {
         if(window.dfeAutocomplete !== undefined && typeof window.dfeAutocomplete === 'function') {
           dfeAutocomplete({
-            showAllValues: #{show_all_values},
-            rawAttribute: #{raw_attribute},
-            source: #{source},
-            autoselect: #{auto_select},
+            showAllValues: true,
+            rawAttribute: false,
+            source: false,
+            autoselect: false,
+            tNoResults: () => '#{I18n.t('autocomplete.no_results')}',
+            tStatusQueryTooShort: (minQueryLength) => `#{I18n.t('autocomplete.status.query_too_short')}`,
+            tStatusNoResults: () => '#{I18n.t('autocomplete.status.no_results')}',
+            tStatusSelectedOption: (selectedOption, length, index) => `#{I18n.t('autocomplete.status.selected_option')}`,
+            tStatusResults: (length, contentSelectedOption) => (length === 1 ? `#{I18n.t('autocomplete.status.results_single')}` : `#{I18n.t('autocomplete.status.results_plural')}`),
+            tAssistiveHint: () => '#{I18n.t('autocomplete.assistive_hint')}',
           })
         }
       });

@@ -3,7 +3,7 @@
 # The "main" locale.
 base_locale: en
 ## All available locales are inferred from the data by default. Alternatively, specify them explicitly:
-# locales: [es, fr]
+locales: [en, cy]
 ## Reporting locale, default: en. Available: en, ru.
 # internal_locale: en
 
@@ -17,8 +17,6 @@ data:
   read:
     ## Default:
     # - config/locales/%{locale}.yml
-    ## More files:
-    - config/locales/*.yml
 
   # Locale files to write new keys to, based on a list of key pattern => file rules. Matched from top to bottom:
   # `i18n-tasks normalize -p` will force move the keys according to these rules
@@ -53,8 +51,9 @@ data:
 # Find translate calls
 search:
   ## Paths or `File.find` patterns to search in:
-  # paths:
-  #  - app/
+  paths:
+    - app/
+    - config/
 
   ## Root directories for relative keys resolution.
   # relative_roots:

@@ -10,7 +10,7 @@ describe FormSubmissionConfirmationMailer, type: :mailer do
   end
   let(:mailer_options) do
     FormSubmissionService::MailerOptions.new(title:,
-                                             preview_mode:,
+                                             is_preview:,
                                              timestamp: submission_timestamp,
                                              submission_reference:,
                                              payment_url:)
@@ -18,16 +18,38 @@ describe FormSubmissionConfirmationMailer, type: :mailer do
   let(:title) { "Form 1" }
   let(:what_happens_next_markdown) { "Please wait for a response" }
   let(:support_contact_details) { "Call: 0203 222 2222" }
-  let(:preview_mode) { false }
+  let(:is_preview) { false }
   let(:confirmation_email_address) { "testing@gov.uk" }
   let(:submission_timestamp) { Time.zone.now }
   let(:submission_reference) { Faker::Alphanumeric.alphanumeric(number: 8).upcase }
   let(:payment_url) { nil }
 
   context "when form filler wants an form submission confirmation email" do
-    it "sends an email with the correct template" do
+    before do
       Settings.govuk_notify.form_filler_confirmation_email_template_id = "123456"
-      expect(mail.govuk_notify_template).to eq("123456")
+      Settings.govuk_notify.form_filler_confirmation_email_welsh_template_id = "7891011"
+    end
+
+    context "when the request locale is not set" do
+      it "uses the English language template" do
+        expect(mail.govuk_notify_template).to eq("123456")
+      end
+    end
+
+    context "when the request locale is set to :en" do
+      include_context "with locale set to :en"
+
+      it "uses the English language template" do
+        expect(mail.govuk_notify_template).to eq("123456")
+      end
+    end
+
+    context "when the request locale is set to :cy" do
+      include_context "with locale set to :cy"
+
+      it "uses the Welsh language template" do
+        expect(mail.govuk_notify_template).to eq("7891011")
+      end
     end
 
     it "sends an email to the form filler's email address" do
@@ -44,6 +66,38 @@ describe FormSubmissionConfirmationMailer, type: :mailer do
 
     it "includes the forms support contact details" do
       expect(mail.govuk_notify_personalisation[:support_contact_details]).to eq("Call: 0203 222 2222")
+    end
+
+    context "when what happens next is missing" do
+      let(:what_happens_next_markdown) { nil }
+
+      it "uses placeholder text" do
+        expect(mail.govuk_notify_personalisation[:what_happens_next_text]).to eq(I18n.t("mailer.submission_confirmation.default_what_happens_next"))
+      end
+    end
+
+    context "when what happens next is blank" do
+      let(:what_happens_next_markdown) { "" }
+
+      it "uses placeholder text" do
+        expect(mail.govuk_notify_personalisation[:what_happens_next_text]).to eq(I18n.t("mailer.submission_confirmation.default_what_happens_next"))
+      end
+    end
+
+    context "when support contact details are missing" do
+      let(:support_contact_details) { nil }
+
+      it "uses placeholder text" do
+        expect(mail.govuk_notify_personalisation[:support_contact_details]).to eq(I18n.t("mailer.submission_confirmation.default_support_contact_details"))
+      end
+    end
+
+    context "when support contact details are blank" do
+      let(:support_contact_details) { "" }
+
+      it "uses placeholder text" do
+        expect(mail.govuk_notify_personalisation[:support_contact_details]).to eq(I18n.t("mailer.submission_confirmation.default_support_contact_details"))
+      end
     end
 
     it "includes an email reference (mostly used to retrieve specific email in notify for e2e tests)" do
@@ -89,9 +143,30 @@ describe FormSubmissionConfirmationMailer, type: :mailer do
           end
         end
 
-        it "includes the date user submitted the form" do
-          travel_to timestamp do
-            expect(mail.govuk_notify_personalisation[:submission_date]).to eq("14 September 2022")
+        context "when the request locale is not set" do
+          it "includes the date user submitted the form in English" do
+            travel_to timestamp do
+              expect(mail.govuk_notify_personalisation[:submission_date]).to eq("14 September 2022")
+            end
+          end
+        end
+
+        context "when the request locale is set to :en" do
+          include_context "with locale set to :en"
+          it "includes the date user submitted the form in English" do
+            travel_to timestamp do
+              expect(mail.govuk_notify_personalisation[:submission_date]).to eq("14 September 2022")
+            end
+          end
+        end
+
+        context "when the request locale is set to :cy" do
+          include_context "with locale set to :cy"
+
+          it "includes the date user submitted the form in Welsh" do
+            travel_to timestamp do
+              expect(mail.govuk_notify_personalisation[:submission_date]).to eq("14 Medi 2022")
+            end
           end
         end
       end
@@ -114,7 +189,7 @@ describe FormSubmissionConfirmationMailer, type: :mailer do
     end
 
     context "when the submission is from preview mode" do
-      let(:preview_mode) { true }
+      let(:is_preview) { true }
 
       it "uses the preview personalisation" do
         expect(mail.govuk_notify_personalisation[:test]).to eq("yes")
